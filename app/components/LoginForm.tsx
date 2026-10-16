@@ -45,7 +45,7 @@ export const LoginForm: React.FC = () => {
 
   const handleBack = () => {
     setQrCode(null);
-    setCredentials(null); // останавливает опрос
+    setCredentials(null);
   };
 
   if (qrCode) {

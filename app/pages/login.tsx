@@ -17,12 +17,6 @@ export default function Login() {
         </div>
 
         <LoginForm />
-
-        <div className="text-center">
-          <Link to="/main" className="text-blue-600 hover:underline">
-            Перейти на основную страницу
-          </Link>
-        </div>
       </Card>
     </div>
   );
