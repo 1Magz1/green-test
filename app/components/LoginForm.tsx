@@ -3,11 +3,9 @@ import { Form, Input, Button, message } from "antd";
 import { useNavigate } from "react-router";
 import { login } from "../api/login";
 import { useAuthPolling } from "../hooks/useAuthPolling";
+import { saveCredentials, type Credentials } from "../storage/credentials";
 
-interface FormValues {
-  idInstance: string;
-  apiTokenInstance: string;
-}
+type FormValues = Credentials;
 
 export const LoginForm: React.FC = () => {
   const [form] = Form.useForm<FormValues>();
@@ -18,9 +16,12 @@ export const LoginForm: React.FC = () => {
   const [credentials, setCredentials] = useState<FormValues | null>(null);
 
   const handleAuthorized = useCallback(() => {
+    if (credentials) {
+      saveCredentials(credentials);
+    }
     message.success("Авторизация выполнена");
     navigate("/main");
-  }, [navigate]);
+  }, [credentials, navigate]);
 
   useAuthPolling(qrCode ? credentials : null, handleAuthorized);
 
@@ -35,6 +36,7 @@ export const LoginForm: React.FC = () => {
       setCredentials(values);
       setQrCode(result.data.message);
     } else if (result.data.type === "alreadyLogged") {
+      saveCredentials(values);
       navigate("/main");
     } else {
       message.error(`Ошибка: ${result.data.message}`);
