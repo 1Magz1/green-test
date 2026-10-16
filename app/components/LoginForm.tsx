@@ -1,40 +1,71 @@
-import React, { useState } from "react";
-import { Form, Input, Button } from "antd";
+import React, { useCallback, useState } from "react";
+import { Form, Input, Button, message } from "antd";
+import { useNavigate } from "react-router";
+import { login } from "../api/login";
+import { useAuthPolling } from "../hooks/useAuthPolling";
 
-interface LoginFormProps {
-  onSuccess?: (values: any) => void;
+interface FormValues {
+  idInstance: string;
+  apiTokenInstance: string;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
-  const [form] = Form.useForm();
+export const LoginForm: React.FC = () => {
+  const [form] = Form.useForm<FormValues>();
+  const navigate = useNavigate();
+
   const [loading, setLoading] = useState(false);
+  const [qrCode, setQrCode] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<FormValues | null>(null);
 
-  const onFinish = async (values: any) => {
+  const handleAuthorized = useCallback(() => {
+    message.success("Авторизация выполнена");
+    navigate("/main");
+  }, [navigate]);
+
+  useAuthPolling(qrCode ? credentials : null, handleAuthorized);
+
+  const onFinish = async (values: FormValues) => {
     setLoading(true);
-    console.log("Mock request with values:", values);
 
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+    const result = await login(values.idInstance, values.apiTokenInstance);
 
-      if (onSuccess) {
-        onSuccess(values);
-      } else {
-        alert("Error");
-      }
-    } catch (error) {
-      console.error("Login failed", error);
-    } finally {
-      setLoading(false);
+    if (!result.success) {
+      message.error(`Ошибка: ${result.error}`);
+    } else if (result.data.type === "qrCode") {
+      setCredentials(values);
+      setQrCode(result.data.message);
+    } else if (result.data.type === "alreadyLogged") {
+      navigate("/main");
+    } else {
+      message.error(`Ошибка: ${result.data.message}`);
     }
+
+    setLoading(false);
   };
 
+  const handleBack = () => {
+    setQrCode(null);
+    setCredentials(null); // останавливает опрос
+  };
+
+  if (qrCode) {
+    return (
+      <div className="mb-6 flex flex-col items-center gap-4">
+        <img
+          src={`data:image/png;base64,${qrCode}`}
+          alt="QR-код для авторизации"
+          width={250}
+          height={250}
+        />
+        <Button block size="large" onClick={handleBack}>
+          Назад
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <Form
-      form={form}
-      layout="vertical"
-      onFinish={onFinish}
-      className="mb-6"
-    >
+    <Form form={form} layout="vertical" onFinish={onFinish} className="mb-6">
       <Form.Item
         label="idInstance"
         name="idInstance"
@@ -46,7 +77,9 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
       <Form.Item
         label="apiTokenInstance"
         name="apiTokenInstance"
-        rules={[{ required: true, message: "Пожалуйста, введите apiTokenInstance" }]}
+        rules={[
+          { required: true, message: "Пожалуйста, введите apiTokenInstance" },
+        ]}
       >
         <Input.Password placeholder="abcd1234..." size="large" />
       </Form.Item>

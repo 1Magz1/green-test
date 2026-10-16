@@ -7,4 +7,13 @@ export default defineConfig({
   resolve: {
     tsconfigPaths: true,
   },
+  server: {
+    proxy: {
+      '/api-green': {
+        target: 'https://api.green-api.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api-green/, ''),
+      },
+    },
+  },
 });
