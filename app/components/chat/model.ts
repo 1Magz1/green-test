@@ -1,7 +1,11 @@
 export interface Chat {
-  /** Совпадает с номером телефона (только цифры), поэтому уникален */
+  /** chatId из Green-API; для локально созданных чатов "phone:<цифры>" */
   id: string;
-  phone: string;
+  name?: string;
+  type?: string;
+  /** Только если номер известен (в API 0 означает "скрыт") */
+  phoneNumber?: number;
+  unreadCount?: number;
 }
 
 export interface Message {
@@ -21,4 +25,27 @@ export function formatPhone(digits: string): string {
     return `+${digits[0]} ${digits.slice(1, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 9)} ${digits.slice(9)}`;
   }
   return `+${digits}`;
+}
+
+export function chatTitle(chat: Chat): string {
+  if (chat.name) return chat.name;
+  if (chat.phoneNumber) return formatPhone(String(chat.phoneNumber));
+  return chat.id;
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  user: "Контакт",
+  bot: "Бот",
+  group: "Группа",
+  supergroup: "Супергруппа",
+  channel: "Канал",
+};
+
+export function chatSubtitle(chat: Chat): string {
+  if (!chat.type) return "Новый чат";
+  return TYPE_LABELS[chat.type] ?? chat.type;
+}
+
+export function localChatFromPhone(digits: string): Chat {
+  return { id: `phone:${digits}`, phoneNumber: Number(digits) };
 }
