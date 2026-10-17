@@ -1,10 +1,13 @@
 import React from "react";
-import { Button, Tooltip } from "antd";
+import { Button, Spin, Tooltip } from "antd";
 import { EditOutlined, LogoutOutlined } from "@ant-design/icons";
-import { formatPhone, type Chat } from "./model";
+import { ChatAvatar } from "./ChatAvatar";
+import { chatSubtitle, chatTitle, type Chat } from "./model";
 
 interface ChatSidebarProps {
   chats: Chat[];
+  avatars: Record<string, string | null>;
+  loading: boolean;
   activeChatId: string | null;
   onSelect: (id: string) => void;
   onNewChat: () => void;
@@ -13,13 +16,15 @@ interface ChatSidebarProps {
 
 export const ChatSidebar: React.FC<ChatSidebarProps> = ({
   chats,
+  avatars,
+  loading,
   activeChatId,
   onSelect,
   onNewChat,
   onLogout,
 }) => (
   <aside className="flex w-80 shrink-0 flex-col bg-white">
-    <header className="flex items-center justify-between px-3 py-3 border-b-4">
+    <header className="flex items-center justify-between px-3 py-3">
       <div className="flex items-center gap-2">
         <Tooltip title="Выйти">
           <Button
@@ -44,12 +49,17 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
       </Tooltip>
     </header>
 
-    {chats.length === 0 ? (
+    {loading && chats.length === 0 ? (
+      <div className="flex justify-center py-8">
+        <Spin />
+      </div>
+    ) : chats.length === 0 ? (
       <p className="px-4 py-6 text-sm text-gray-500">Чатов пока нет</p>
     ) : (
       <ul className="min-h-0 flex-1 overflow-y-auto">
         {chats.map((chat) => {
           const active = chat.id === activeChatId;
+          const unread = chat.unreadCount ?? 0;
           return (
             <li key={chat.id}>
               <button
@@ -62,16 +72,20 @@ export const ChatSidebar: React.FC<ChatSidebarProps> = ({
                     : "border-transparent hover:bg-[#f1f5f9]"
                 }`}
               >
-                <span className="h-11 w-11 shrink-0 rounded-full bg-gray-300" />
-                <span className="min-w-0">
+                <ChatAvatar url={avatars[chat.id]} title={chatTitle(chat)} size={44} />
+                <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-gray-900">
-                    {formatPhone(chat.phone)}
+                    {chatTitle(chat)}
                   </span>
-                  <span className="flex items-center gap-1.5 text-xs text-gray-500">
-                    <span className="h-2 w-2 rounded-full bg-green-500" />
-                    онлайн
+                  <span className="block truncate text-xs text-gray-500">
+                    {chatSubtitle(chat)}
                   </span>
                 </span>
+                {unread > 0 && (
+                  <span className="min-w-5 shrink-0 rounded-full bg-[#3d6fa3] px-1.5 text-center text-xs leading-5 text-white">
+                    {unread}
+                  </span>
+                )}
               </button>
             </li>
           );
