@@ -1,16 +1,19 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Button, Input } from "antd";
 import { SendOutlined } from "@ant-design/icons";
-import { formatPhone, type Chat, type Message } from "./model";
+import { ChatAvatar } from "./ChatAvatar";
+import { chatTitle, type Chat, type Message } from "./model";
 
 interface ChatWindowProps {
   chat: Chat;
+  avatarUrl?: string | null;
   messages: Message[];
   onSend: (text: string) => void;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
   chat,
+  avatarUrl,
   messages,
   onSend,
 }) => {
@@ -31,9 +34,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-3">
-        <span className="h-10 w-10 shrink-0 rounded-full bg-gray-300" />
+        <ChatAvatar url={avatarUrl} title={chatTitle(chat)} size={40} />
         <span className="text-sm font-medium text-gray-900">
-          {formatPhone(chat.phone)}
+          {chatTitle(chat)}
         </span>
       </header>
 
