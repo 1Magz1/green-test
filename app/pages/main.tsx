@@ -1,20 +1,86 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { message } from "antd";
 import { Navigate, useNavigate } from "react-router";
-import { clearCredentials, loadCredentials } from "../storage/credentials";
+import {
+  clearCredentials,
+  loadCredentials,
+  type Credentials,
+} from "../storage/credentials";
+import { getChats } from "../api/getChats";
+import { useAvatars } from "../hooks/useAvatars";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { NewChatForm } from "../components/chat/NewChatForm";
-import type { Chat, Message } from "../components/chat/model";
+import {
+  localChatFromPhone,
+  type Chat,
+  type Message,
+} from "../components/chat/model";
 
 export default function Main() {
   const navigate = useNavigate();
   const [chats, setChats] = useState<Chat[]>([]);
+  const [chatsLoading, setChatsLoading] = useState(true);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
 
-  const credentials = loadCredentials();
-  if (!credentials) {
+  const [credentials, setCredentials] = useState<Credentials | null | undefined>(
+    undefined
+  );
+  useEffect(() => {
+    setCredentials(loadCredentials());
+  }, []);
+
+  const idInstance = credentials?.idInstance;
+  const apiTokenInstance = credentials?.apiTokenInstance;
+
+  const chatIds = useMemo(() => chats.map((c) => c.id), [chats]);
+  const avatars = useAvatars(idInstance, apiTokenInstance, chatIds);
+
+  useEffect(() => {
+    if (!idInstance || !apiTokenInstance) return;
+
+    const controller = new AbortController();
+
+    getChats(idInstance, apiTokenInstance, controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+
+      if (result.success) {
+        const loaded: Chat[] = result.chats.map((c) => ({
+          id: c.chatId,
+          name: c.name,
+          type: c.type,
+          phoneNumber: c.phoneNumber || undefined,
+          unreadCount: c.unreadCount,
+        }));
+
+        setChats((prev) => {
+          const loadedIds = new Set(loaded.map((c) => c.id));
+          const loadedPhones = new Set(
+            loaded.map((c) => c.phoneNumber).filter(Boolean)
+          );
+          const localOnly = prev.filter(
+            (c) =>
+              !loadedIds.has(c.id) &&
+              !(c.phoneNumber && loadedPhones.has(c.phoneNumber))
+          );
+          return [...localOnly, ...loaded];
+        });
+      } else {
+        message.error(`Не удалось загрузить чаты: ${result.error}`);
+      }
+      setChatsLoading(false);
+    });
+
+    return () => controller.abort();
+  }, [idInstance, apiTokenInstance]);
+
+  if (credentials === undefined) {
+    return null;
+  }
+
+  if (credentials === null) {
     return <Navigate to="/" replace />;
   }
 
@@ -36,10 +102,15 @@ export default function Main() {
   };
 
   const handleCreateChat = (phone: string) => {
-    setChats((prev) =>
-      prev.some((c) => c.id === phone) ? prev : [{ id: phone, phone }, ...prev]
-    );
-    setActiveChatId(phone);
+    const existing = chats.find((c) => c.phoneNumber === Number(phone));
+    if (existing) {
+      handleSelectChat(existing.id);
+      return;
+    }
+
+    const chat = localChatFromPhone(phone);
+    setChats((prev) => [chat, ...prev]);
+    setActiveChatId(chat.id);
     setIsCreating(false);
   };
 
@@ -52,6 +123,8 @@ export default function Main() {
       <div className="flex h-[min(720px,calc(100dvh-2rem))] w-full max-w-[1100px] overflow-hidden rounded-xl bg-white shadow-xl">
         <ChatSidebar
           chats={chats}
+          avatars={avatars}
+          loading={chatsLoading}
           activeChatId={activeChatId}
           onSelect={handleSelectChat}
           onNewChat={handleNewChat}
@@ -66,6 +139,7 @@ export default function Main() {
           ) : activeChat ? (
             <ChatWindow
               chat={activeChat}
+              avatarUrl={avatars[activeChat.id]}
               messages={messages[activeChat.id] ?? []}
               onSend={(text) => handleSend(activeChat.id, text)}
             />
