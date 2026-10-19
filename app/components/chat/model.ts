@@ -12,6 +12,8 @@ export interface Message {
   id: string;
   text: string;
   outgoing: boolean;
+  /** UNIX-время в секундах, если известно */
+  timestamp?: number;
 }
 
 /** "+7 (999) 123-45-67" -> "79991234567" */
@@ -27,6 +29,7 @@ export function formatPhone(digits: string): string {
   return `+${digits}`;
 }
 
+/** Что показывать в списке и в шапке чата */
 export function chatTitle(chat: Chat): string {
   if (chat.name) return chat.name;
   if (chat.phoneNumber) return formatPhone(String(chat.phoneNumber));
@@ -41,11 +44,36 @@ const TYPE_LABELS: Record<string, string> = {
   channel: "Канал",
 };
 
+/** Подпись под названием чата в списке */
 export function chatSubtitle(chat: Chat): string {
   if (!chat.type) return "Новый чат";
   return TYPE_LABELS[chat.type] ?? chat.type;
 }
 
+/** Локально созданные чаты ("phone:...") не имеют настоящего chatId */
+export const isLocalChat = (id: string): boolean => id.startsWith("phone:");
+
+/** Чат, созданный через форму: настоящего chatId у него ещё нет */
 export function localChatFromPhone(digits: string): Chat {
   return { id: `phone:${digits}`, phoneNumber: Number(digits) };
+}
+
+const dateFormatter = new Intl.DateTimeFormat("ru-RU", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/** UNIX-время в секундах -> "17 октября 2026" (в часовом поясе браузера) */
+export function formatMessageDate(timestamp: number): string {
+  const parts = dateFormatter.formatToParts(new Date(timestamp * 1000));
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")} ${get("month")} ${get("year")}`;
+}
+
+/** Ключ календарного дня сообщения (по местному времени), чтобы группировать по дням */
+export function messageDayKey(timestamp: number): string {
+  const d = new Date(timestamp * 1000);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }

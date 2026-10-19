@@ -8,6 +8,7 @@ import {
 } from "../storage/credentials";
 import { getChats } from "../api/getChats";
 import { useAvatars } from "../hooks/useAvatars";
+import { useChatHistory } from "../hooks/useChatHistory";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { NewChatForm } from "../components/chat/NewChatForm";
@@ -37,6 +38,7 @@ export default function Main() {
 
   const chatIds = useMemo(() => chats.map((c) => c.id), [chats]);
   const avatars = useAvatars(idInstance, apiTokenInstance, chatIds);
+  const history = useChatHistory(idInstance, apiTokenInstance, activeChatId);
 
   useEffect(() => {
     if (!idInstance || !apiTokenInstance) return;
@@ -51,7 +53,7 @@ export default function Main() {
           id: c.chatId,
           name: c.name,
           type: c.type,
-          phoneNumber: c.phoneNumber || undefined,
+          phoneNumber: c.phoneNumber || undefined, // 0 = номер скрыт
           unreadCount: c.unreadCount,
         }));
 
@@ -85,6 +87,7 @@ export default function Main() {
   }
 
   const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
+  const historyState = activeChat ? history.getState(activeChat.id) : null;
 
   const handleLogout = () => {
     clearCredentials();
@@ -115,7 +118,22 @@ export default function Main() {
   };
 
   const handleSend = (chatId: string, text: string) => {
-    // TODO: сделать отправку сообщений
+    // TODO: отправка через Green-API; пока сообщение только добавляется локально
+    setMessages((prev) => {
+      const list = prev[chatId] ?? [];
+      return {
+        ...prev,
+        [chatId]: [
+          ...list,
+          {
+            id: `${Date.now()}-${list.length}`,
+            text,
+            outgoing: true,
+            timestamp: Math.floor(Date.now() / 1000),
+          },
+        ],
+      };
+    });
   };
 
   return (
@@ -138,9 +156,17 @@ export default function Main() {
             </div>
           ) : activeChat ? (
             <ChatWindow
+              key={activeChat.id}
               chat={activeChat}
               avatarUrl={avatars[activeChat.id]}
-              messages={messages[activeChat.id] ?? []}
+              messages={[
+                ...(historyState?.messages ?? []),
+                ...(messages[activeChat.id] ?? []),
+              ]}
+              loadingHistory={historyState?.loading ?? false}
+              hasMore={historyState?.hasMore ?? false}
+              historyError={historyState?.error ?? null}
+              onLoadOlder={() => history.loadMore(activeChat.id)}
               onSend={(text) => handleSend(activeChat.id, text)}
             />
           ) : (

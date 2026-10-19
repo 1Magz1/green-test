@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { getAvatar } from "../api/getAvatar";
+import { isLocalChat } from "../components/chat/model";
 
 const MAX_CONCURRENT = 3;
-
-const isLocalChat = (id: string) => id.startsWith("phone:");
 
 /**
  * Подгружает аватары для списка чатов.
