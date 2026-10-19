@@ -11,10 +11,17 @@ import { getChats } from "../api/getChats";
 import { sendMessage } from "../api/sendMessage";
 import { useAvatars } from "../hooks/useAvatars";
 import { useChatHistory } from "../hooks/useChatHistory";
+import {
+  useIncomingMessages,
+  type IncomingMessage,
+} from "../hooks/useIncomingMessages";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { NewChatForm } from "../components/chat/NewChatForm";
 import type { Chat, Message } from "../components/chat/model";
+
+/** Допуск на расхождение часов клиента и сервера при определении "свежих" сообщений */
+const FRESH_TOLERANCE_MS = 60_000;
 
 export default function Main() {
   // Хуки должны вызываться до любого раннего return
@@ -40,8 +47,32 @@ export default function Main() {
   const chatIds = useMemo(() => chats.map((c) => c.id), [chats]);
   const avatars = useAvatars(idInstance, apiTokenInstance, chatIds);
   const history = useChatHistory(idInstance, apiTokenInstance, activeChatId);
+  const [sessionStart] = useState(() => Date.now());
 
-  // Загрузка существующих чатов при открытии страницы
+  const handleIncoming = ({ chat, message: incoming }: IncomingMessage) => {
+    if ((messages[chat.id] ?? []).some((m) => m.serverId === incoming.serverId)) {
+      return;
+    }
+
+    const isActive = chat.id === activeChatId && !isCreating;
+    const isFresh =
+      (incoming.timestamp ?? 0) * 1000 >= sessionStart - FRESH_TOLERANCE_MS;
+
+    setMessages((prev) => ({
+      ...prev,
+      [chat.id]: [...(prev[chat.id] ?? []), incoming],
+    }));
+
+    setChats((prev) => {
+      const base = prev.find((c) => c.id === chat.id) ?? chat;
+      const unreadCount =
+        !isActive && isFresh ? (base.unreadCount ?? 0) + 1 : base.unreadCount;
+      return [{ ...base, unreadCount }, ...prev.filter((c) => c.id !== chat.id)];
+    });
+  };
+
+  useIncomingMessages(idInstance, apiTokenInstance, handleIncoming);
+
   useEffect(() => {
     if (!idInstance || !apiTokenInstance) return;
 
@@ -59,7 +90,6 @@ export default function Main() {
           unreadCount: c.unreadCount,
         }));
 
-        // Локально созданные чаты, которых нет в ответе сервера, не теряем
         setChats((prev) => {
           const loadedIds = new Set(loaded.map((c) => c.id));
           const loadedPhones = new Set(
@@ -82,7 +112,7 @@ export default function Main() {
   }, [idInstance, apiTokenInstance]);
 
   if (credentials === undefined) {
-    return null; // совпадает с серверным HTML, поэтому гидрация проходит
+    return null;
   }
 
   if (credentials === null) {
@@ -92,7 +122,6 @@ export default function Main() {
   const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
   const historyState = activeChat ? history.getState(activeChat.id) : null;
 
-  // Отправленные из этого окна сообщения, которые уже пришли в истории, не дублируем
   const historyIds = new Set((historyState?.messages ?? []).map((m) => m.id));
   const localMessages = activeChat
     ? (messages[activeChat.id] ?? []).filter(
@@ -108,6 +137,9 @@ export default function Main() {
   const handleSelectChat = (id: string) => {
     setActiveChatId(id);
     setIsCreating(false);
+    setChats((prev) =>
+      prev.map((c) => (c.id === id && c.unreadCount ? { ...c, unreadCount: 0 } : c))
+    );
   };
 
   const handleNewChat = () => {
@@ -115,13 +147,10 @@ export default function Main() {
     setIsCreating(true);
   };
 
-  // Метода "создать чат" в API нет: chatId по номеру телефона возвращает CheckAccount,
-  // после чего чат добавляется в список локально.
   const handleCreateChat = async (phone: string): Promise<boolean> => {
     if (!idInstance || !apiTokenInstance) return false;
     const phoneNumber = Number(phone);
 
-    // Чат с этим номером уже есть в списке: открываем без запроса к API
     const known = chats.find((c) => c.phoneNumber === phoneNumber);
     if (known) {
       handleSelectChat(known.id);
@@ -176,7 +205,6 @@ export default function Main() {
     }
   };
 
-  // Сообщение сразу появляется в окне со статусом "sending", затем уходит в API
   const handleSend = (chatId: string, text: string) => {
     const localId = `local-${Date.now()}-${(messages[chatId] ?? []).length}`;
     setMessages((prev) => ({

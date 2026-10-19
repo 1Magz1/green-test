@@ -71,3 +71,21 @@ export function messageDayKey(timestamp: number): string {
   const d = new Date(timestamp * 1000);
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
+
+// Подписи для сообщений без текста. Названия типов взяты из названий разделов
+// документации и не везде подтверждены примерами ответа.
+const MESSAGE_TYPE_LABELS: Record<string, string> = {
+  imageMessage: "Фото",
+  videoMessage: "Видео",
+  documentMessage: "Документ",
+  audioMessage: "Аудио",
+  pollMessage: "Опрос",
+  locationMessage: "Геопозиция",
+  contactMessage: "Контакт",
+  stickerMessage: "Стикер",
+};
+
+/** "[Фото]" для сообщения без текста; "[Сообщение]" для неизвестного типа */
+export function placeholderText(typeMessage: unknown): string {
+  return `[${MESSAGE_TYPE_LABELS[String(typeMessage)] ?? "Сообщение"}]`;
+}

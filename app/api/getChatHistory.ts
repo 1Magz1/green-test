@@ -1,3 +1,5 @@
+import { placeholderText } from "../components/chat/model";
+
 export interface HistoryMessage {
   id: string;
   text: string;
@@ -8,36 +10,42 @@ export interface HistoryMessage {
 export type GetChatHistoryResult =
   | {
       success: true;
+      /** Отсортированы по времени (старые сверху), без дублей по idMessage */
       messages: HistoryMessage[];
+      /** Сколько элементов вернул сервер (до фильтрации и удаления дублей) */
       total: number;
     }
   | { success: false; error: string };
 
-const TYPE_LABELS: Record<string, string> = {
-  imageMessage: "Фото",
-  videoMessage: "Видео",
-  documentMessage: "Документ",
-  audioMessage: "Аудио",
-  pollMessage: "Опрос",
-  locationMessage: "Геопозиция",
-};
+function toHistoryMessage(
+  raw: Record<string, unknown>,
+  index: number
+): HistoryMessage | null {
+  if (raw === null || typeof raw !== "object") return null;
 
-function toHistoryMessage(raw: Record<string, unknown>): HistoryMessage | null {
-  if (typeof raw.idMessage !== "string" || raw.idMessage === "") return null;
+  const timestamp = typeof raw.timestamp === "number" ? raw.timestamp : 0;
+  const id =
+    typeof raw.idMessage === "string" || typeof raw.idMessage === "number"
+      ? String(raw.idMessage)
+      : `h-${timestamp}-${index}`;
 
   const text =
     typeof raw.textMessage === "string" && raw.textMessage !== ""
       ? raw.textMessage
-      : `[${TYPE_LABELS[String(raw.typeMessage)] ?? "Сообщение"}]`;
+      : placeholderText(raw.typeMessage);
 
   return {
-    id: raw.idMessage,
+    id,
     text,
     outgoing: raw.type === "outgoing",
-    timestamp: typeof raw.timestamp === "number" ? raw.timestamp : 0,
+    timestamp,
   };
 }
 
+/**
+ * Возвращает последние `count` сообщений чата.
+ * В документации у метода есть только chatId и count, смещения/курсора нет.
+ */
 export async function getChatHistory(
   idInstance: string,
   apiTokenInstance: string,
@@ -60,6 +68,9 @@ export async function getChatHistory(
     }
 
     const data: unknown = await response.json();
+    if (import.meta.env.DEV) {
+      console.debug("[getChatHistory]", { chatId, count, response: data });
+    }
     if (!Array.isArray(data)) {
       throw new Error("Неожиданный формат ответа getChatHistory");
     }
@@ -68,7 +79,7 @@ export async function getChatHistory(
     const messages = data
       .map((item, index) => ({
         index,
-        message: toHistoryMessage(item as Record<string, unknown>),
+        message: toHistoryMessage(item as Record<string, unknown>, index),
       }))
       .filter(
         (x): x is { index: number; message: HistoryMessage } => x.message !== null
@@ -78,6 +89,7 @@ export async function getChatHistory(
         seen.add(message.id);
         return true;
       })
+      // порядок в ответе не гарантирован документацией, сортируем сами
       .sort(
         (a, b) => a.message.timestamp - b.message.timestamp || a.index - b.index
       )

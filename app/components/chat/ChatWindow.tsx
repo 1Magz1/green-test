@@ -16,6 +16,7 @@ import {
 } from "./model";
 
 const LOAD_THRESHOLD_PX = 40;
+const NEAR_BOTTOM_PX = 100;
 
 interface ChatWindowProps {
   chat: Chat;
@@ -44,6 +45,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   const scrollRef = useRef<HTMLDivElement>(null);
   const prevScroll = useRef<{ height: number; top: number } | null>(null);
   const lastMessageId = useRef<string | undefined>(undefined);
+  const nearBottom = useRef(true);
 
   const requestOlder = () => {
     const el = scrollRef.current;
@@ -63,10 +65,13 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
       return;
     }
 
-    const lastId = messages[messages.length - 1]?.id;
-    if (lastId !== lastMessageId.current) {
-      lastMessageId.current = lastId;
-      el.scrollTop = el.scrollHeight;
+    const last = messages[messages.length - 1];
+    if (last?.id !== lastMessageId.current) {
+      const firstLoad = lastMessageId.current === undefined;
+      lastMessageId.current = last?.id;
+      if (firstLoad || last?.outgoing || nearBottom.current) {
+        el.scrollTop = el.scrollHeight;
+      }
     }
   }, [messages.length, loadingHistory]);
 
@@ -79,6 +84,9 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   }, [messages.length, loadingHistory, hasMore, historyError]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    nearBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+
     if (
       e.currentTarget.scrollTop < LOAD_THRESHOLD_PX &&
       hasMore &&
