@@ -26,6 +26,7 @@ interface ChatWindowProps {
   historyError: string | null;
   onLoadOlder: () => void;
   onSend: (text: string) => void;
+  onRetry: (messageId: string) => void;
 }
 
 export const ChatWindow: React.FC<ChatWindowProps> = ({
@@ -37,6 +38,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
   historyError,
   onLoadOlder,
   onSend,
+  onRetry,
 }) => {
   const [text, setText] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -117,16 +119,28 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({
           m.outgoing
             ? "self-end bg-[#d9e7f5] text-gray-900"
             : "self-start bg-white text-gray-900"
-        }`}
+        } ${m.status === "sending" ? "opacity-60" : ""}`}
       >
         {m.text}
+        {m.status === "failed" && (
+          <span className="mt-1 flex items-center gap-2 text-xs text-red-600">
+            Не отправлено
+            <button
+              type="button"
+              className="underline"
+              onClick={() => onRetry(m.id)}
+            >
+              Повторить
+            </button>
+          </span>
+        )}
       </li>
     );
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-2">
+      <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-5 py-3">
         <ChatAvatar url={avatarUrl} title={chatTitle(chat)} size={40} />
         <span className="text-sm font-medium text-gray-900">
           {chatTitle(chat)}

@@ -8,6 +8,7 @@ import {
 } from "../storage/credentials";
 import { checkAccount } from "../api/checkAccount";
 import { getChats } from "../api/getChats";
+import { sendMessage } from "../api/sendMessage";
 import { useAvatars } from "../hooks/useAvatars";
 import { useChatHistory } from "../hooks/useChatHistory";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
@@ -91,6 +92,14 @@ export default function Main() {
   const activeChat = chats.find((c) => c.id === activeChatId) ?? null;
   const historyState = activeChat ? history.getState(activeChat.id) : null;
 
+  // Отправленные из этого окна сообщения, которые уже пришли в истории, не дублируем
+  const historyIds = new Set((historyState?.messages ?? []).map((m) => m.id));
+  const localMessages = activeChat
+    ? (messages[activeChat.id] ?? []).filter(
+        (m) => !(m.serverId && historyIds.has(m.serverId))
+      )
+    : [];
+
   const handleLogout = () => {
     clearCredentials();
     navigate("/", { replace: true });
@@ -139,23 +148,58 @@ export default function Main() {
     return true;
   };
 
+  const updateLocalMessage = (
+    chatId: string,
+    localId: string,
+    patch: Partial<Message>
+  ) => {
+    setMessages((prev) => ({
+      ...prev,
+      [chatId]: (prev[chatId] ?? []).map((m) =>
+        m.id === localId ? { ...m, ...patch } : m
+      ),
+    }));
+  };
+
+  const deliver = async (chatId: string, localId: string, text: string) => {
+    if (!idInstance || !apiTokenInstance) return;
+
+    const result = await sendMessage(idInstance, apiTokenInstance, chatId, text);
+    if (result.success) {
+      updateLocalMessage(chatId, localId, {
+        status: "sent",
+        serverId: result.idMessage ?? undefined,
+      });
+    } else {
+      updateLocalMessage(chatId, localId, { status: "failed" });
+      message.error(`Не удалось отправить сообщение: ${result.error}`);
+    }
+  };
+
+  // Сообщение сразу появляется в окне со статусом "sending", затем уходит в API
   const handleSend = (chatId: string, text: string) => {
-    // TODO: отправка через Green-API; пока сообщение только добавляется локально
-    setMessages((prev) => {
-      const list = prev[chatId] ?? [];
-      return {
-        ...prev,
-        [chatId]: [
-          ...list,
-          {
-            id: `${Date.now()}-${list.length}`,
-            text,
-            outgoing: true,
-            timestamp: Math.floor(Date.now() / 1000),
-          },
-        ],
-      };
-    });
+    const localId = `local-${Date.now()}-${(messages[chatId] ?? []).length}`;
+    setMessages((prev) => ({
+      ...prev,
+      [chatId]: [
+        ...(prev[chatId] ?? []),
+        {
+          id: localId,
+          text,
+          outgoing: true,
+          timestamp: Math.floor(Date.now() / 1000),
+          status: "sending",
+        },
+      ],
+    }));
+    void deliver(chatId, localId, text);
+  };
+
+  const handleRetry = (chatId: string, localId: string) => {
+    const failed = (messages[chatId] ?? []).find((m) => m.id === localId);
+    if (!failed) return;
+    updateLocalMessage(chatId, localId, { status: "sending" });
+    void deliver(chatId, localId, failed.text);
   };
 
   return (
@@ -181,15 +225,13 @@ export default function Main() {
               key={activeChat.id}
               chat={activeChat}
               avatarUrl={avatars[activeChat.id]}
-              messages={[
-                ...(historyState?.messages ?? []),
-                ...(messages[activeChat.id] ?? []),
-              ]}
+              messages={[...(historyState?.messages ?? []), ...localMessages]}
               loadingHistory={historyState?.loading ?? false}
               hasMore={historyState?.hasMore ?? false}
               historyError={historyState?.error ?? null}
               onLoadOlder={() => history.loadMore(activeChat.id)}
               onSend={(text) => handleSend(activeChat.id, text)}
+              onRetry={(id) => handleRetry(activeChat.id, id)}
             />
           ) : (
             <div className="flex flex-1 items-center justify-center p-6">

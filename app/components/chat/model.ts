@@ -14,6 +14,8 @@ export interface Message {
   outgoing: boolean;
   /** UNIX-время в секундах, если известно */
   timestamp?: number;
+  status?: "sending" | "sent" | "failed";
+  serverId?: string;
 }
 
 /** "+7 (999) 123-45-67" -> "79991234567" */
