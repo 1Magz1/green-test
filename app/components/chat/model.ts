@@ -1,5 +1,5 @@
 export interface Chat {
-  /** chatId из Green-API; для локально созданных чатов "phone:<цифры>" */
+  /** chatId из Green-API */
   id: string;
   name?: string;
   type?: string;
@@ -48,14 +48,6 @@ const TYPE_LABELS: Record<string, string> = {
 export function chatSubtitle(chat: Chat): string {
   if (!chat.type) return "Новый чат";
   return TYPE_LABELS[chat.type] ?? chat.type;
-}
-
-/** Локально созданные чаты ("phone:...") не имеют настоящего chatId */
-export const isLocalChat = (id: string): boolean => id.startsWith("phone:");
-
-/** Чат, созданный через форму: настоящего chatId у него ещё нет */
-export function localChatFromPhone(digits: string): Chat {
-  return { id: `phone:${digits}`, phoneNumber: Number(digits) };
 }
 
 const dateFormatter = new Intl.DateTimeFormat("ru-RU", {

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { getAvatar } from "../api/getAvatar";
-import { isLocalChat } from "../components/chat/model";
 
 const MAX_CONCURRENT = 3;
 
@@ -20,9 +19,7 @@ export function useAvatars(
   useEffect(() => {
     if (!idInstance || !apiTokenInstance) return;
 
-    const ids = chatIds.filter(
-      (id) => !isLocalChat(id) && !requested.current.has(id)
-    );
+    const ids = chatIds.filter((id) => !requested.current.has(id));
     if (ids.length === 0) return;
 
     const controller = new AbortController();

@@ -6,19 +6,17 @@ import {
   loadCredentials,
   type Credentials,
 } from "../storage/credentials";
+import { checkAccount } from "../api/checkAccount";
 import { getChats } from "../api/getChats";
 import { useAvatars } from "../hooks/useAvatars";
 import { useChatHistory } from "../hooks/useChatHistory";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { ChatWindow } from "../components/chat/ChatWindow";
 import { NewChatForm } from "../components/chat/NewChatForm";
-import {
-  localChatFromPhone,
-  type Chat,
-  type Message,
-} from "../components/chat/model";
+import type { Chat, Message } from "../components/chat/model";
 
 export default function Main() {
+  // Хуки должны вызываться до любого раннего return
   const navigate = useNavigate();
   const [chats, setChats] = useState<Chat[]>([]);
   const [chatsLoading, setChatsLoading] = useState(true);
@@ -26,6 +24,8 @@ export default function Main() {
   const [isCreating, setIsCreating] = useState(false);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
 
+  // undefined = ещё не проверяли (так на сервере и при первом рендере на клиенте),
+  // null = данных нет. sessionStorage читаем только в браузере, после монтирования.
   const [credentials, setCredentials] = useState<Credentials | null | undefined>(
     undefined
   );
@@ -40,6 +40,7 @@ export default function Main() {
   const avatars = useAvatars(idInstance, apiTokenInstance, chatIds);
   const history = useChatHistory(idInstance, apiTokenInstance, activeChatId);
 
+  // Загрузка существующих чатов при открытии страницы
   useEffect(() => {
     if (!idInstance || !apiTokenInstance) return;
 
@@ -57,6 +58,7 @@ export default function Main() {
           unreadCount: c.unreadCount,
         }));
 
+        // Локально созданные чаты, которых нет в ответе сервера, не теряем
         setChats((prev) => {
           const loadedIds = new Set(loaded.map((c) => c.id));
           const loadedPhones = new Set(
@@ -79,7 +81,7 @@ export default function Main() {
   }, [idInstance, apiTokenInstance]);
 
   if (credentials === undefined) {
-    return null;
+    return null; // совпадает с серверным HTML, поэтому гидрация проходит
   }
 
   if (credentials === null) {
@@ -104,17 +106,37 @@ export default function Main() {
     setIsCreating(true);
   };
 
-  const handleCreateChat = (phone: string) => {
-    const existing = chats.find((c) => c.phoneNumber === Number(phone));
-    if (existing) {
-      handleSelectChat(existing.id);
-      return;
+  // Метода "создать чат" в API нет: chatId по номеру телефона возвращает CheckAccount,
+  // после чего чат добавляется в список локально.
+  const handleCreateChat = async (phone: string): Promise<boolean> => {
+    if (!idInstance || !apiTokenInstance) return false;
+    const phoneNumber = Number(phone);
+
+    // Чат с этим номером уже есть в списке: открываем без запроса к API
+    const known = chats.find((c) => c.phoneNumber === phoneNumber);
+    if (known) {
+      handleSelectChat(known.id);
+      return true;
     }
 
-    const chat = localChatFromPhone(phone);
-    setChats((prev) => [chat, ...prev]);
-    setActiveChatId(chat.id);
-    setIsCreating(false);
+    const result = await checkAccount(idInstance, apiTokenInstance, phoneNumber);
+    if (!result.success) {
+      message.error(result.error);
+      return false;
+    }
+    if (!result.chatId) {
+      message.warning("На этом номере не найден аккаунт");
+      return false;
+    }
+
+    const chatId = result.chatId;
+    setChats((prev) =>
+      prev.some((c) => c.id === chatId)
+        ? prev
+        : [{ id: chatId, type: "user", phoneNumber }, ...prev]
+    );
+    handleSelectChat(chatId);
+    return true;
   };
 
   const handleSend = (chatId: string, text: string) => {

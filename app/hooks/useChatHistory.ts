@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getChatHistory } from "../api/getChatHistory";
-import { isLocalChat, type Message } from "../components/chat/model";
+import type { Message } from "../components/chat/model";
 
 /** Сколько сообщений добавляется за одну подгрузку */
 export const HISTORY_PAGE_SIZE = 10;
@@ -21,14 +21,14 @@ const INITIAL: HistoryState = {
   error: null,
 };
 
-const NO_HISTORY: HistoryState = {
-  messages: [],
-  requested: 0,
-  hasMore: false,
-  loading: false,
-  error: null,
-};
-
+/**
+ * История чатов с подгрузкой "по страницам".
+ *
+ * У GetChatHistory нет смещения/курсора, только count (последние N сообщений).
+ * Поэтому каждая следующая "страница" это запрос с count на 10 больше, а новыми
+ * для интерфейса оказываются более старые сообщения. Предыдущие данные при этом
+ * запрашиваются заново.
+ */
 export function useChatHistory(
   idInstance: string | undefined,
   apiTokenInstance: string | undefined,
@@ -44,7 +44,7 @@ export function useChatHistory(
 
   const loadMore = useCallback(
     async (chatId: string) => {
-      if (!idInstance || !apiTokenInstance || isLocalChat(chatId)) return;
+      if (!idInstance || !apiTokenInstance) return;
       if (inFlight.current.has(chatId)) return;
 
       const current = statesRef.current[chatId];
@@ -91,18 +91,13 @@ export function useChatHistory(
   );
 
   useEffect(() => {
-    if (
-      activeChatId &&
-      !isLocalChat(activeChatId) &&
-      !statesRef.current[activeChatId]
-    ) {
+    if (activeChatId && !statesRef.current[activeChatId]) {
       void loadMore(activeChatId);
     }
   }, [activeChatId, loadMore]);
 
   const getState = useCallback(
-    (chatId: string): HistoryState =>
-      isLocalChat(chatId) ? NO_HISTORY : (states[chatId] ?? INITIAL),
+    (chatId: string): HistoryState => states[chatId] ?? INITIAL,
     [states]
   );
 

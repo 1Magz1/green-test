@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { Button, Form, Input } from "antd";
 import { normalizePhone } from "./model";
 
 interface NewChatFormProps {
-  onCreate: (phone: string) => void;
+  onCreate: (phone: string) => Promise<boolean>;
 }
 
 interface FormValues {
@@ -12,10 +12,15 @@ interface FormValues {
 
 export const NewChatForm: React.FC<NewChatFormProps> = ({ onCreate }) => {
   const [form] = Form.useForm<FormValues>();
+  const [loading, setLoading] = useState(false);
 
-  const handleFinish = (values: FormValues) => {
-    onCreate(normalizePhone(values.phone));
-    form.resetFields();
+  const handleFinish = async (values: FormValues) => {
+    setLoading(true);
+    try {
+      await onCreate(normalizePhone(values.phone));
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -24,18 +29,24 @@ export const NewChatForm: React.FC<NewChatFormProps> = ({ onCreate }) => {
         Начать новый чат
       </h2>
 
-      <Form form={form} layout="vertical" onFinish={handleFinish}>
+      <Form
+        form={form}
+        layout="vertical"
+        onFinish={handleFinish}
+        disabled={loading}
+      >
         <Form.Item
           label="Номер телефона получателя"
           name="phone"
           rules={[
             {
               validator: (_, value?: string) => {
+                // Допустимая длина (11 или 12 цифр) указана в описании ошибок CheckAccount
                 const digits = normalizePhone(value ?? "");
-                return digits.length >= 10 && digits.length <= 15
+                return digits.length === 11 || digits.length === 12
                   ? Promise.resolve()
                   : Promise.reject(
-                      new Error("Введите номер, например +7 999 123 45 67")
+                      new Error("Введите номер в международном формате, например +7 999 123 45 67")
                     );
               },
             },
@@ -44,7 +55,13 @@ export const NewChatForm: React.FC<NewChatFormProps> = ({ onCreate }) => {
           <Input placeholder="+7 999 123 45 67" size="large" />
         </Form.Item>
 
-        <Button htmlType="submit" block size="large" className="h-12">
+        <Button
+          htmlType="submit"
+          block
+          size="large"
+          className="h-12"
+          loading={loading}
+        >
           Создать чат
         </Button>
       </Form>
