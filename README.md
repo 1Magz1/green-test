@@ -1,87 +1,95 @@
-# Welcome to React Router!
+# Green API Chat
 
-A modern, production-ready template for building full-stack React applications using React Router.
+Веб-клиент для мессенджера MAX на базе [Green-API](https://green-api.com): вход по данным инстанса и QR-коду, список чатов с аватарами, отправка и получение сообщений, добавление чата по номеру телефона.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+> [!WARNING]
+> **Ограничение API: история переписок**
+>
+> Само API Green-API не возвращает корректно историю переписок: метод `GetChatHistory` отдаёт только историю отправок самого инстанса (исходящие сообщения), сообщений собеседников в ней нет.
 
-## Features
+## Возможности
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- вход по `idInstance` и `apiTokenInstance`, показ QR-кода и переход в чат после авторизации;
+- список существующих чатов с аватарами;
+- история чата с подгрузкой по 10 сообщений при прокрутке вверх и разделителями по датам;
+- отправка сообщений;
+- создание чата по номеру телефона.
 
-## Getting Started
+## Требования
 
-### Installation
+- Node.js **v22.13.0**
+- npm **10.9.2**
+- аккаунт на [Green-API](https://green-api.com) и приложение MAX на телефоне
 
-Install the dependencies:
+## Подготовка (Green-API)
+
+1. Зарегистрируйтесь на сервисе [Green-API](https://green-api.com) и создайте инстанс для мессенджера MAX. Запишите `idInstance` и `apiTokenInstance`: они понадобятся для входа в приложение.
+2. В настройках инстанса (личный кабинет Green-API) включите уведомления о входящих сообщениях (`incomingWebhook`) и оставьте пустым поле `webhookUrl`. Для получения уведомлений по HTTP API документация требует пустой `webhookUrl`. Без включённого `incomingWebhook` входящие сообщения не приходят.
+3. Привяжите аккаунт: после входа в приложение откроется QR-код, **отсканируйте его в приложении MAX**. Как только инстанс перейдёт в состояние `authorized`, приложение само откроет страницу чатов.
+
+## Установка и запуск
 
 ```bash
 npm install
-```
-
-### Development
-
-Start the development server with HMR:
-
-```bash
 npm run dev
 ```
 
-Your application will be available at `http://localhost:5173`.
+Приложение откроется на [http://localhost:5173](http://localhost:5173).
 
-## Building for Production
+## Прокси к Green-API
 
-Create a production build:
+Запросы к API идут на префикс `/api-green`, который в режиме разработки проксируется Vite (это нужно, чтобы обойти CORS). Пример настройки в `vite.config.ts` (сверьте с вашим конфигом; в `target` подставьте `apiUrl` вашего инстанса из личного кабинета Green-API):
 
-```bash
-npm run build
+```ts
+server: {
+  proxy: {
+    "/api-green": {
+      target: "<apiUrl вашего инстанса>",
+      changeOrigin: true,
+      rewrite: (path) => path.replace(/^\/api-green/, ""),
+    },
+  },
+},
 ```
 
-## Deployment
+## Как пользоваться
 
-### Docker Deployment
+1. Введите `idInstance` и `apiTokenInstance` и нажмите «Войти».
+2. Отсканируйте показанный QR-код в MAX.
+3. После авторизации откроется страница с чатами. Выберите чат слева или нажмите кнопку «Новый чат», введите номер телефона и создайте чат.
+4. Кнопка выхода в левом верхнем углу очищает сохранённые данные инстанса.
 
-To build and run using Docker:
+## Используемые методы Green-API
 
-```bash
-docker build -t my-app .
+| Метод                                        | Для чего используется                                   |
+| -------------------------------------------- | ------------------------------------------------------- |
+| `qr`                                         | QR-код для авторизации инстанса                         |
+| `getStateInstance`                           | Ожидание авторизации после сканирования QR              |
+| `getChats`                                   | Список чатов                                            |
+| `getAvatar`                                  | Аватары чатов                                           |
+| `getChatHistory`                             | История чата (см. ограничение выше)                     |
+| `checkAccount`                               | Получение `chatId` по номеру телефона при создании чата |
+| `sendMessage`                                | Отправка текстовых сообщений                            |
+| `receiveNotification` / `deleteNotification` | Получение входящих сообщений из очереди уведомлений     |
 
-# Run the container
-docker run -p 3000:3000 my-app
-```
+## Структура проекта
 
-The containerized application can be deployed to any platform that supports Docker, including:
+| Модуль             | Назначение                                                                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `api/`             | Тонкие обёртки над методами Green-API (`login`, `getStateInstance`, `getChats`, `getAvatar`, `getChatHistory`, `checkAccount`, `sendMessage`, `receiveNotification`, `deleteNotification`) |
+| `hooks/`           | `useAuthPolling` (ожидание авторизации), `useAvatars`, `useChatHistory` (подгрузка истории), `useIncomingMessages` (опрос очереди уведомлений)                                             |
+| `components/chat/` | `ChatSidebar`, `ChatWindow`, `NewChatForm`, `ChatAvatar` и общие типы и хелперы в `model.ts`                                                                                               |
+| `storage/`         | Хранение данных инстанса в `sessionStorage`                                                                                                                                                |
+| Страницы           | Форма входа с QR-кодом и страница `Main` с чатами                                                                                                                                          |
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
+## Известные ограничения
 
-### DIY Deployment
+- **Очередь уведомлений одна на инстанс.** Уведомление получает тот, кто успел его запросить. Вторая вкладка с приложением или другой клиент на том же инстансе будут забирать сообщения друг у друга.
+- **Исходящие сообщения с телефона** и отправленные другими клиентами в реальном времени не показываются.
+- **История подгружается увеличением `count`** (10, 20, 30…): у `GetChatHistory` нет смещения или курсора, поэтому каждая следующая «страница» заново запрашивает и предыдущие сообщения.
+- **Чаты, созданные по номеру,** добавляются в список локально; после перезагрузки они остаются, только если `getChats` их возвращает.
+- **Лимиты Green-API.** У методов есть ограничения на частоту запросов; метод `checkAccount` может вернуть ошибку 469 при частых проверках разных номеров.
 
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
+## Безопасность
 
-Make sure to deploy the output of `npm run build`
-
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+`apiTokenInstance` хранится в `sessionStorage` и передаётся в пути запросов, поэтому может попасть в логи прокси. Для учебного или тестового проекта это допустимо, но в продакшене токен стоит держать на бэкенде и не отдавать во фронтенд.
